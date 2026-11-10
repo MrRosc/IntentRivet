@@ -1,0 +1,63 @@
+# IntentRivet executor with the real Telegram Bot API: the supported deployment (stand/setup.sh).
+# It runs alone: Hermes is installed elsewhere (README, Install) and reaches the executor's API
+# at 127.0.0.1:${INTENTRIVET_PORT:-8787} on this host (on another host, through an SSH tunnel),
+# with the agent key. The executor holds the publisher bot's token, polls the bot for its owner and
+# publishes. Its own project, volume and image tag. The token comes from the git-ignored
+# .stand-live/ (stand/live-setup.sh).
+#   export COMPOSE_FILE=compose.live.yaml    # then the usual docker compose and stand/ scripts
+# The bundled Hermes below is an optional example, started only with --profile demo.
+name: intentrivet-live
+
+services:
+  # Trusted side: snapshot store, permissions, owner, channels, agent key, the bot token. Its route
+  # out is for https://api.telegram.org only (TLS, certificate verified): publications and the
+  # owner's private chat, by long polling (no webhook). Its API is published on this host's
+  # loopback only, never on a public address.
+  executor:
+    build: ./executor            # build context = executor/ only
+    image: intentrivet-executor:stage3-live
+    restart: always              # rootless Podman: podman-restart.service starts it at boot (with linger)
+    mem_limit: 256m              # a bound for the host: tens of MB in use, at most 16 HTTP handlers of ~6.6 MB
+    memswap_limit: 256m          # memory and swap together: rootless Podman would add as much swap otherwise
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [internal, telegram]
+    ports:
+      - "127.0.0.1:${INTENTRIVET_PORT:-8787}:8080"
+    environment:
+      TELEGRAM_API_BASE: https://api.telegram.org
+    volumes:
+      - executor-data:/data
+      - ./.stand-live/channels.json:/etc/intentrivet/channels.json:ro   # read once: stage 3-4 channels
+    secrets:
+      - telegram_bot_token
+
+  # Optional example Hermes (--profile demo): official image, pinned by digest. The internal network
+  # for the executor's API, and its own route out for the model provider (which also reaches the
+  # public internet, Telegram included, without any bot token). No Docker socket, host home, keys,
+  # repository mount, token or executor volume; only its own data volume. The model key goes into
+  # the demo profile's .env, never into the container environment.
+  hermes:
+    image: nousresearch/hermes-agent:v0.22.7@sha256:e6d81ae52ebf6a43efa529701405509f20054ba818f179ddd748bed4f8af584c
+    profiles: [demo]
+    command: ["sleep", "infinity"]
+    depends_on: [executor]
+    security_opt: [no-new-privileges:true]
+    networks: [internal, egress]
+    volumes:
+      - hermes-data:/opt/data
+
+networks:
+  internal:
+    internal: true               # no route out of the stand
+  telegram: {}                   # executor only: egress to the Telegram Bot API (and its published port)
+  egress: {}                     # example Hermes only: the model provider API
+
+volumes:
+  executor-data: {}
+  hermes-data: {}
+
+secrets:
+  telegram_bot_token:
+    file: .stand-live/telegram_bot_token

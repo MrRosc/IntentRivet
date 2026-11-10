@@ -1,0 +1,5 @@
+# Local stand secrets, model credentials and check logs: never committed, never in an image.
+.stand/
+.stand-live/
+__pycache__/
+.stand-logs/

@@ -1,0 +1,13 @@
+{
+  "_comment": "Local stand configuration. The chat_ids are synthetic and stable; they are not real Telegram channels.",
+  "channels": {
+    "test": {
+      "title": "IntentRivet Test Channel (local stand)",
+      "chat_id": -1000000000001
+    },
+    "main": {
+      "title": "IntentRivet Main Channel (local stand)",
+      "chat_id": -1000000000002
+    }
+  }
+}

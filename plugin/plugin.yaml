@@ -1,0 +1,14 @@
+name: intentrivet
+version: 0.4.2
+requires_hermes: ">=0.20.1"
+description: Prepare Telegram posts and publish one only when the owner allows it in Telegram. A trusted executor stores each version as an immutable snapshot, sends its preview to the owner and enforces the permission.
+requires_env:
+  - name: INTENTRIVET_URL
+    description: "the IntentRivet executor's address as this Hermes reaches it, e.g. http://127.0.0.1:8787"
+  - name: INTENTRIVET_AGENT_KEY
+    description: "the agent key from executor.py agent-key on the executor host"
+    secret: true
+provides_tools:
+  - intentrivet_prepare_post
+  - intentrivet_publish_post
+  - intentrivet_list_channels

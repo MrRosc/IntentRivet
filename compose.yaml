@@ -1,0 +1,68 @@
+# IntentRivet local stand with the Telegram stand-in (no real Telegram), for tests. Use only the
+# account's rootless Podman Docker context; see README. The deployment is compose.live.yaml.
+name: intentrivet
+
+services:
+  # Trusted side: owns the snapshot store, the permissions, the owner, the channels and the bot
+  # token, polls the stand-in for the owner's updates, and is the only service that can reach
+  # the Telegram stand-in. No internet access.
+  executor:
+    build: ./executor            # build context = executor/ only
+    image: intentrivet-executor:stage3
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [internal, telegram]
+    environment:
+      TELEGRAM_API_BASE: http://telegram-mock:8081   # this stand never talks to the real Telegram
+    volumes:
+      - executor-data:/data
+      # Read once: its channels are imported into an empty store (INTENTRIVET_LEGACY_CHANNELS=/dev/null:
+      # none, as on a new installation, where the owner connects channels in Telegram).
+      - ${INTENTRIVET_LEGACY_CHANNELS:-./stand/channels.json}:/etc/intentrivet/channels.json:ro
+    secrets:
+      - telegram_bot_token
+
+  # Test-only stand-in for the Telegram Bot API: counts sendMessage calls and accepted posts
+  # in its own volume. Stock Python image pinned by digest; the script is mounted read-only.
+  telegram-mock:
+    image: python:3.13.17-slim-trixie@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962
+    command: ["python", "-I", "/app/telegram_mock.py", "serve"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [telegram]
+    volumes:
+      - ./stand/telegram_mock.py:/app/telegram_mock.py:ro
+      - telegram-mock-data:/state
+    secrets:
+      - telegram_bot_token
+
+  # Demo Hermes: official image, pinned by digest. Gets no Docker socket, no host
+  # home, no keys, no repository mount and no token; only its own data volume.
+  # The test model key goes into the demo profile's .env (stand/configure-model.sh),
+  # never into the container environment.
+  hermes:
+    image: nousresearch/hermes-agent:v0.22.7@sha256:e6d81ae52ebf6a43efa529701405509f20054ba818f179ddd748bed4f8af584c
+    command: ["sleep", "infinity"]
+    depends_on: [executor]
+    security_opt: [no-new-privileges:true]
+    networks: [internal, egress]
+    volumes:
+      - hermes-data:/opt/data
+
+networks:
+  internal:
+    internal: true               # no route out of the stand
+  telegram:
+    internal: true               # executor <-> Telegram stand-in only; Hermes is not attached
+  egress: {}                     # Hermes only: the model provider API
+
+volumes:
+  executor-data: {}
+  hermes-data: {}
+  telegram-mock-data: {}
+
+secrets:
+  telegram_bot_token:
+    file: .stand/telegram_bot_token
